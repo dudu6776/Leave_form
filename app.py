@@ -31,7 +31,19 @@ total_days = st.number_input(
     "Total Leave Days", min_value=1.0, value=1.0, step=0.5
 )
 
-# Robust keyword mapping for checkbox shapes
+# Mapping of Form Control XML property files to leave keywords
+CTRL_PROP_MAP = {
+    "xl/ctrlProps/ctrlProp1.xml": ["adoption leave", "adoption"],
+    "xl/ctrlProps/ctrlProp2.xml": ["paternity", "maternity", "p/m-l"],
+    "xl/ctrlProps/ctrlProp3.xml": ["shared parental", "spl"],
+    "xl/ctrlProps/ctrlProp4.xml": ["others"],
+    "xl/ctrlProps/ctrlProp5.xml": ["personal leave", "(pl)"],
+    "xl/ctrlProps/ctrlProp6.xml": ["childcare leave", "(cl)"],
+    "xl/ctrlProps/ctrlProp7.xml": ["annual leave", "(al)"],
+    "xl/ctrlProps/ctrlProp8.xml": ["unpaid leave", "(ul)"],
+    "xl/ctrlProps/ctrlProp9.xml": ["off day", "(od)"],
+}
+
 LEAVE_KEYWORD_MAP = {
     "Annual Leave (AL)": ["annual leave", "(al)"],
     "Personal Leave (PL)": ["personal leave", "(pl)"],
@@ -53,7 +65,10 @@ if st.button("Generate Leave Form", type="primary"):
     template_path = "Leave_application.xlsx"
     output_filename = f"{date_str.replace('/', '-')}.xlsx"
 
-    # Zip modification logic to preserve shapes, drawings, and images
+    target_keywords = LEAVE_KEYWORD_MAP.get(
+        leave_type, [leave_type.lower()]
+    )
+
     out_buffer = io.BytesIO()
     with zipfile.ZipFile(template_path, "r") as src, zipfile.ZipFile(
         out_buffer, "w"
@@ -61,7 +76,7 @@ if st.button("Generate Leave Form", type="primary"):
         for item in src.infolist():
             data = src.read(item.filename)
 
-            # Update cell values in sheet1.xml
+            # 1. Update cell values in sheet1.xml
             if item.filename == "xl/worksheets/sheet1.xml":
                 xml_str = data.decode("utf-8")
                 xml_str = re.sub(
@@ -96,26 +111,39 @@ if st.button("Generate Leave Form", type="primary"):
                 )
                 data = xml_str.encode("utf-8")
 
-            # Update VML checkbox layer
+            # 2. Update Modern Excel Checkbox Control Property files (xl/ctrlProps/ctrlProp*.xml)
+            elif item.filename in CTRL_PROP_MAP:
+                prop_keywords = CTRL_PROP_MAP[item.filename]
+                is_selected = any(kw in target_keywords for kw in prop_keywords) or any(
+                    kw in leave_type.lower() for kw in prop_keywords
+                )
+
+                ctrl_xml = data.decode("utf-8")
+                # Remove checked attribute first
+                ctrl_xml = re.sub(r'\s*checked="Checked"', '', ctrl_xml)
+
+                # Add checked attribute if selected
+                if is_selected:
+                    ctrl_xml = ctrl_xml.replace(
+                        'objectType="CheckBox"',
+                        'objectType="CheckBox" checked="Checked"',
+                    )
+                data = ctrl_xml.encode("utf-8")
+
+            # 3. Update VML Checkbox Drawing Layer
             elif item.filename == "xl/drawings/vmlDrawing1.vml":
                 vml_text = data.decode("utf-8")
 
-                # Uncheck all existing checkboxes first
+                # Uncheck all existing VML checkboxes first
                 vml_text = re.sub(
                     r"<x:Checked>1</x:Checked>", "<x:Checked>0</x:Checked>", vml_text
                 )
 
-                # Find all shape blocks in VML
                 shapes = re.findall(
                     r"(<v:shape.*?</v:shape>)", vml_text, re.DOTALL
                 )
-                target_keywords = LEAVE_KEYWORD_MAP.get(
-                    leave_type, [leave_type.lower()]
-                )
-
                 for shape in shapes:
                     if 'ObjectType="Checkbox"' in shape:
-                        # Strip HTML tags and normalize extra whitespace for reliable matching
                         cleaned_text = re.sub(
                             r"\s+", " ", re.sub(r"<[^>]+>", " ", shape)
                         ).lower()
