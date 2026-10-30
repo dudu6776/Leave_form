@@ -244,3 +244,48 @@ with col_mail:
         f'font-weight:bold;border-radius:8px;font-size:15px;">✉️ Open Email App</div></a>',
         unsafe_allow_html=True,
     )
+
+import smtplib
+from email.message import EmailMessage
+
+st.markdown("### ✉️ Option 2: Send Direct Email with Attachment")
+recipient = st.text_input("Enter Manager / HR Email:", placeholder="manager@company.com")
+
+if st.button("📧 Send Email Now", type="primary"):
+    if not recipient:
+        st.warning("Please enter an email address first.")
+    else:
+        try:
+            # Use Streamlit Secrets for sender credentials
+            sender_email = st.secrets["SMTP_EMAIL"]
+            sender_password = st.secrets["SMTP_PASSWORD"]
+            
+            msg = EmailMessage()
+            msg["Subject"] = f"Leave Application - {leave_type}"
+            msg["From"] = sender_email
+            msg["To"] = recipient
+            msg.set_content(
+                f"Hi,\n\nSubmitting my leave application:\n"
+                f"- Type: {leave_type}\n"
+                f"- Period: {start_date_str} to {end_date_str}\n"
+                f"- Days: {total_days}\n"
+                f"- Reason: {reason_final}\n\n"
+                f"Attached is the official Leave Application form."
+            )
+            
+            # Attach Excel File
+            msg.add_attachment(
+                excel_bytes,
+                maintype="application",
+                subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                filename=output_filename
+            )
+            
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+                
+            st.success(f"Email sent directly to {recipient} with Excel attached!")
+        except Exception as e:
+            st.error(f"Failed to send email: {e}")
