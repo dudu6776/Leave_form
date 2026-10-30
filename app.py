@@ -103,4 +103,37 @@ def generate_excel_bytes():
     target_keywords = LEAVE_KEYWORD_MAP.get(leave_type, [leave_type.lower()])
 
     out_buffer = io.BytesIO()
-    with
+    with zipfile.ZipFile(template_path, "r") as src, zipfile.ZipFile(out_buffer, "w") as dst:
+        for item in src.infolist():
+            data = src.read(item.filename)
+
+            if item.filename == "xl/worksheets/sheet1.xml":
+                xml_str = data.decode("utf-8")
+                xml_str = re.sub(
+                    r'<c r="G14"[^>]*>(.*?)</c>',
+                    f'<c r="G14" s="25" t="inlineStr"><is><t>Date: {date_str}</t></is></c>',
+                    xml_str,
+                )
+                xml_str = re.sub(
+                    r'<c r="A18"[^>]*/>',
+                    f'<c r="A18" s="5" t="inlineStr"><is><t>{start_date_str}</t></is></c>',
+                    xml_str,
+                )
+                xml_str = re.sub(
+                    r'<c r="B18"[^>]*/>',
+                    f'<c r="B18" s="5" t="inlineStr"><is><t>{end_date_str}</t></is></c>',
+                    xml_str,
+                )
+                xml_str = re.sub(
+                    r'<c r="C18"[^>]*/>',
+                    f'<c r="C18" s="19" t="inlineStr"><is><t>{reason_final}</t></is></c>',
+                    xml_str,
+                )
+                xml_str = re.sub(
+                    r'<c r="H18"[^>]*/>',
+                    f'<c r="H18" s="6"><v>{total_days}</v></c>',
+                    xml_str,
+                )
+                xml_str = re.sub(
+                    r'<c r="H28"[^>]*>.*?</c>',
+                    f'<c r="H2
