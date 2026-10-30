@@ -1,4 +1,5 @@
 import io
+import math
 import re
 import zipfile
 from datetime import datetime, timedelta
@@ -31,15 +32,15 @@ with col1:
 with col2:
     period_from_input = st.date_input("Period From", datetime.now())
 
-# 0.5 Day (Half Day) Leave support
+# Leave Days input
 total_days = st.number_input(
     "Total Leave Days", min_value=0.5, value=1.0, step=0.5
 )
 
 reason = st.text_input("Reason of Leave", placeholder="e.g. Personal Matters")
 
-# Append half-day tag if applicable
-if total_days == 0.5 or total_days % 1 != 0:
+# Append "(Half Day)" tag only if total_days is strictly 0.5
+if total_days == 0.5:
     reason_final = f"{reason} (Half Day)" if reason else "(Half Day)"
 else:
     reason_final = reason
@@ -49,11 +50,11 @@ today_date_str = todays_date_input.strftime("%d-%m-%y")
 start_date_str = period_from_input.strftime("%d-%m-%y")
 
 start_date = datetime.strptime(start_date_str, "%d-%m-%y")
-if total_days <= 0.5:
-    end_date_str = start_date_str
-else:
-    end_date = start_date + timedelta(days=int(total_days) - 1)
-    end_date_str = end_date.strftime("%d-%m-%y")
+
+# Correct date span calculation for integer and decimal day inputs
+days_to_add = max(0, math.ceil(total_days) - 1)
+end_date = start_date + timedelta(days=days_to_add)
+end_date_str = end_date.strftime("%d-%m-%y")
 
 # ==========================================
 # In-App Live Preview Section
