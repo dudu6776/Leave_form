@@ -234,7 +234,6 @@ with col_wa:
         f'<a href="{whatsapp_url}" target="_blank" style="text-decoration:none;">'
         f'<div style="background-color:#25D366;color:white;padding:12px;text-align:center;'
         f'font-weight:bold;border-radius:8px;font-size:15px;">💬 Open WhatsApp</div></a>',
-        unsafe_allow_allowed_html=True if hasattr(st, "allow_allowed_html") else True,
         unsafe_allow_html=True,
     )
 
@@ -243,6 +242,5 @@ with col_mail:
         f'<a href="{email_url}" target="_blank" style="text-decoration:none;">'
         f'<div style="background-color:#0078D4;color:white;padding:12px;text-align:center;'
         f'font-weight:bold;border-radius:8px;font-size:15px;">✉️ Open Email App</div></a>',
-        unsafe_allow_allowed_html=True if hasattr(st, "allow_allowed_html") else True,
         unsafe_allow_html=True,
     )
