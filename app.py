@@ -67,4 +67,6 @@ preview_html = (
     f'<h3 style="margin:0; color:#0078D4;">Leave Application Form</h3>'
     f'<span style="font-weight:bold;">Date: {today_date_str}</span>'
     '</div>'
-    '<hr style="margin:12px 0; border:0; border-
+    '<hr style="margin:12px 0; border:0; border-top:1px solid #CCC;" />'
+    f'<p style="font-size:15px; margin-bottom:12px;"><b>Selected Leave Type:</b> {leave_type}</p>'
+    '<table style="width:100%; border-collapse:collapse; background-color:#FFF; font-size:14px;" border="1" cellpadding="8">'
