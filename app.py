@@ -136,4 +136,123 @@ def generate_excel_bytes():
                 )
                 xml_str = re.sub(
                     r'<c r="H28"[^>]*>.*?</c>',
-                    f'<c r="H2
+                    f'<c r="H28" s="35"><f>SUM(H18:H27)</f><v>{total_days}</v></c>',
+                    xml_str,
+                )
+                data = xml_str.encode("utf-8")
+
+            elif item.filename in CTRL_PROP_MAP:
+                prop_keywords = CTRL_PROP_MAP[item.filename]
+                is_selected = any(kw in target_keywords for kw in prop_keywords) or any(
+                    kw in leave_type.lower() for kw in prop_keywords
+                )
+
+                ctrl_xml = data.decode("utf-8")
+                ctrl_xml = re.sub(r'\s*checked="Checked"', '', ctrl_xml)
+                if is_selected:
+                    ctrl_xml = ctrl_xml.replace(
+                        'objectType="CheckBox"',
+                        'objectType="CheckBox" checked="Checked"',
+                    )
+                data = ctrl_xml.encode("utf-8")
+
+            elif item.filename == "xl/drawings/vmlDrawing1.vml":
+                vml_text = data.decode("utf-8")
+                vml_text = re.sub(
+                    r"<x:Checked>1</x:Checked>", "<x:Checked>0</x:Checked>", vml_text
+                )
+
+                shapes = re.findall(
+                    r"(<v:shape.*?</v:shape>)", vml_text, re.DOTALL
+                )
+                for shape in shapes:
+                    if 'ObjectType="Checkbox"' in shape:
+                        cleaned_text = re.sub(
+                            r"\s+", " ", re.sub(r"<[^>]+>", " ", shape)
+                        ).lower()
+
+                        if any(kw in cleaned_text for kw in target_keywords):
+                            new_shape = re.sub(
+                                r'<x:ClientData ObjectType="Checkbox">(.*?)</x:ClientData>',
+                                r'<x:ClientData ObjectType="Checkbox">\g<1><x:Checked>1</x:Checked></x:ClientData>',
+                                shape,
+                                flags=re.DOTALL,
+                            )
+                            vml_text = vml_text.replace(shape, new_shape)
+                            break
+
+                data = vml_text.encode("utf-8")
+
+            dst.writestr(item, data)
+
+    return out_buffer.getvalue()
+
+output_filename = f"Leave_Application_{date_str.replace('/', '-')}.xlsx"
+excel_bytes = generate_excel_bytes()
+excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
+
+# ==========================================
+# 3. Output Options
+# ==========================================
+st.markdown("### 📤 Output Options")
+
+col_opt1, col_opt2 = st.columns(2)
+
+# Option 1: Direct File Download
+with col_opt1:
+    st.write("**Option 1: Save to Device**")
+    st.download_button(
+        label="💾 Download Excel File",
+        data=excel_bytes,
+        file_name=output_filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        type="primary",
+    )
+
+# Option 2: Native App Share with File Attached
+with col_opt2:
+    st.write("**Option 2: Open in App**")
+    share_component_code = f"""
+    <script>
+    async function shareFile() {{
+      const b64Data = "{excel_b64}";
+      const fileName = "{output_filename}";
+      
+      try {{
+        const response = await fetch(`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${{b64Data}}`);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, {{ type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }});
+        
+        if (navigator.canShare && navigator.canShare({{ files: [file] }})) {{
+          await navigator.share({{
+            title: 'Leave Application Form',
+            text: 'Here is my completed Leave Application Form.',
+            files: [file]
+          }});
+        }} else {{
+          alert('Native file sharing is supported on mobile browsers (Safari or Chrome on iOS / Android). Please use Option 1 to download directly.');
+        }}
+      }} catch (err) {{
+        if (err.name !== 'AbortError') {{
+          alert('Share failed: ' + err.message);
+        }}
+      }}
+    }}
+    </script>
+    <button onclick="shareFile()" style="
+        width: 100%;
+        background-color: #25D366;
+        color: white;
+        border: none;
+        padding: 11px 16px;
+        font-size: 15px;
+        font-weight: bold;
+        border-radius: 8px;
+        cursor: pointer;
+        box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
+    ">
+        📲 Open App & Attach File
+    </button>
+    """
+    components.html(share_component_code, height=55)
