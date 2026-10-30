@@ -25,7 +25,8 @@ leave_type = st.selectbox(
     ],
 )
 
-date_input = st.date_input("Date / Period From", datetime.now())
+todays_date_input = st.date_input("Today's Date", datetime.now())
+period_from_input = st.date_input("Period From", datetime.now())
 reason = st.text_input("Reason of Leave", placeholder="e.g. Personal Matters")
 total_days = st.number_input(
     "Total Leave Days", min_value=1.0, value=1.0, step=0.5
@@ -57,13 +58,15 @@ LEAVE_KEYWORD_MAP = {
 }
 
 if st.button("Generate Leave Form", type="primary"):
-    date_str = date_input.strftime("%d-%m-%y")
-    start_date = datetime.strptime(date_str, "%d-%m-%y")
+    today_date_str = todays_date_input.strftime("%d-%m-%y")
+    start_date_str = period_from_input.strftime("%d-%m-%y")
+    
+    start_date = datetime.strptime(start_date_str, "%d-%m-%y")
     end_date = start_date + timedelta(days=int(total_days) - 1)
     end_date_str = end_date.strftime("%d-%m-%y")
 
     template_path = "Leave_application.xlsx"
-    output_filename = f"{date_str.replace('/', '-')}.xlsx"
+    output_filename = f"{today_date_str.replace('/', '-')}.xlsx"
 
     target_keywords = LEAVE_KEYWORD_MAP.get(
         leave_type, [leave_type.lower()]
@@ -79,16 +82,20 @@ if st.button("Generate Leave Form", type="primary"):
             # 1. Update cell values in sheet1.xml
             if item.filename == "xl/worksheets/sheet1.xml":
                 xml_str = data.decode("utf-8")
+                
+                # G14 uses Today's Date
                 xml_str = re.sub(
                     r'<c r="G14"[^>]*>(.*?)</c>',
-                    f'<c r="G14" s="25" t="inlineStr"><is><t>Date: {date_str}</t></is></c>',
+                    f'<c r="G14" s="25" t="inlineStr"><is><t>Date: {today_date_str}</t></is></c>',
                     xml_str,
                 )
+                # A18 uses Period From
                 xml_str = re.sub(
                     r'<c r="A18"[^>]*/>',
-                    f'<c r="A18" s="5" t="inlineStr"><is><t>{date_str}</t></is></c>',
+                    f'<c r="A18" s="5" t="inlineStr"><is><t>{start_date_str}</t></is></c>',
                     xml_str,
                 )
+                # B18 uses Period To
                 xml_str = re.sub(
                     r'<c r="B18"[^>]*/>',
                     f'<c r="B18" s="5" t="inlineStr"><is><t>{end_date_str}</t></is></c>',
@@ -111,7 +118,7 @@ if st.button("Generate Leave Form", type="primary"):
                 )
                 data = xml_str.encode("utf-8")
 
-            # 2. Update Modern Excel Checkbox Control Property files (xl/ctrlProps/ctrlProp*.xml)
+            # 2. Update Form Control Property files (xl/ctrlProps/ctrlProp*.xml)
             elif item.filename in CTRL_PROP_MAP:
                 prop_keywords = CTRL_PROP_MAP[item.filename]
                 is_selected = any(kw in target_keywords for kw in prop_keywords) or any(
@@ -119,10 +126,8 @@ if st.button("Generate Leave Form", type="primary"):
                 )
 
                 ctrl_xml = data.decode("utf-8")
-                # Remove checked attribute first
                 ctrl_xml = re.sub(r'\s*checked="Checked"', '', ctrl_xml)
 
-                # Add checked attribute if selected
                 if is_selected:
                     ctrl_xml = ctrl_xml.replace(
                         'objectType="CheckBox"',
@@ -134,7 +139,6 @@ if st.button("Generate Leave Form", type="primary"):
             elif item.filename == "xl/drawings/vmlDrawing1.vml":
                 vml_text = data.decode("utf-8")
 
-                # Uncheck all existing VML checkboxes first
                 vml_text = re.sub(
                     r"<x:Checked>1</x:Checked>", "<x:Checked>0</x:Checked>", vml_text
                 )
