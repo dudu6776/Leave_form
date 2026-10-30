@@ -7,7 +7,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Dad's Leave Application Form", page_icon="📄", layout="centered")
 
-st.title("📄 Leave Application Form")
+st.title("📄Dad's Leave Application Form")
 st.write("Fill in the details below to generate your completed leave application. You can look at the preview to make sure it is correct before downloading it.")
 
 # Form inputs
