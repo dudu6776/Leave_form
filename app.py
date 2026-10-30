@@ -1,10 +1,10 @@
 import base64
 import io
 import re
+import urllib.parse
 import zipfile
 from datetime import datetime, timedelta
 import streamlit as st
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Leave Application Form", page_icon="📄", layout="centered")
 
@@ -189,70 +189,60 @@ def generate_excel_bytes():
 
 output_filename = f"Leave_Application_{date_str.replace('/', '-')}.xlsx"
 excel_bytes = generate_excel_bytes()
-excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
 
 # ==========================================
 # 3. Output Options
 # ==========================================
 st.markdown("### 📤 Output Options")
 
-col_opt1, col_opt2 = st.columns(2)
-
 # Option 1: Direct File Download
-with col_opt1:
-    st.write("**Option 1: Save to Device**")
-    st.download_button(
-        label="💾 Download Excel File",
-        data=excel_bytes,
-        file_name=output_filename,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        type="primary",
+st.write("**Option 1: Save Excel File to Device**")
+st.download_button(
+    label="💾 Download Excel File",
+    data=excel_bytes,
+    file_name=output_filename,
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True,
+    type="primary",
+)
+
+st.markdown("---")
+
+# Option 2: Pre-filled App Links
+st.write("**Option 2: Open App with Pre-filled Message**")
+st.caption("Tap below to open WhatsApp or Email with the leave details ready. You can attach the downloaded Excel file to the message.")
+
+message_text = (
+    f"Hi, submitting my leave application:\n"
+    f"- Type: {leave_type}\n"
+    f"- Period: {start_date_str} to {end_date_str}\n"
+    f"- Days: {total_days}\n"
+    f"- Reason: {reason_final}\n\n"
+    f"Attached is the official Leave Application form."
+)
+
+encoded_msg = urllib.parse.quote(message_text)
+encoded_subject = urllib.parse.quote(f"Leave Application - {leave_type}")
+
+whatsapp_url = f"https://api.whatsapp.com/send?text={encoded_msg}"
+email_url = f"mailto:?subject={encoded_subject}&body={encoded_msg}"
+
+col_wa, col_mail = st.columns(2)
+
+with col_wa:
+    st.markdown(
+        f'<a href="{whatsapp_url}" target="_blank" style="text-decoration:none;">'
+        f'<div style="background-color:#25D366;color:white;padding:12px;text-align:center;'
+        f'font-weight:bold;border-radius:8px;font-size:15px;">💬 Open WhatsApp</div></a>',
+        unsafe_allow_allowed_html=True if hasattr(st, "allow_allowed_html") else True,
+        unsafe_allow_html=True,
     )
 
-# Option 2: Native App Share with File Attached
-with col_opt2:
-    st.write("**Option 2: Open in App**")
-    share_component_code = f"""
-    <script>
-    async function shareFile() {{
-      const b64Data = "{excel_b64}";
-      const fileName = "{output_filename}";
-      
-      try {{
-        const response = await fetch(`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${{b64Data}}`);
-        const blob = await response.blob();
-        const file = new File([blob], fileName, {{ type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }});
-        
-        if (navigator.canShare && navigator.canShare({{ files: [file] }})) {{
-          await navigator.share({{
-            title: 'Leave Application Form',
-            text: 'Here is my completed Leave Application Form.',
-            files: [file]
-          }});
-        }} else {{
-          alert('Native file sharing is supported on mobile browsers (Safari or Chrome on iOS / Android). Please use Option 1 to download directly.');
-        }}
-      }} catch (err) {{
-        if (err.name !== 'AbortError') {{
-          alert('Share failed: ' + err.message);
-        }}
-      }}
-    }}
-    </script>
-    <button onclick="shareFile()" style="
-        width: 100%;
-        background-color: #25D366;
-        color: white;
-        border: none;
-        padding: 11px 16px;
-        font-size: 15px;
-        font-weight: bold;
-        border-radius: 8px;
-        cursor: pointer;
-        box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
-    ">
-        📲 Open App & Attach File
-    </button>
-    """
-    components.html(share_component_code, height=55)
+with col_mail:
+    st.markdown(
+        f'<a href="{email_url}" target="_blank" style="text-decoration:none;">'
+        f'<div style="background-color:#0078D4;color:white;padding:12px;text-align:center;'
+        f'font-weight:bold;border-radius:8px;font-size:15px;">✉️ Open Email App</div></a>',
+        unsafe_allow_allowed_html=True if hasattr(st, "allow_allowed_html") else True,
+        unsafe_allow_html=True,
+    )
