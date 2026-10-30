@@ -160,4 +160,92 @@ def generate_excel_bytes():
                 ctrl_xml = data.decode("utf-8")
                 ctrl_xml = re.sub(r'\s*checked="Checked"', '', ctrl_xml)
                 if is_selected:
-                    ctrl_xml = ctrl_xml.
+                    ctrl_xml = ctrl_xml.replace(
+                        'objectType="CheckBox"',
+                        'objectType="CheckBox" checked="Checked"',
+                    )
+                data = ctrl_xml.encode("utf-8")
+
+            # 3. Update VML Checkboxes
+            elif item.filename == "xl/drawings/vmlDrawing1.vml":
+                vml_text = data.decode("utf-8")
+                vml_text = re.sub(
+                    r"<x:Checked>1</x:Checked>", "<x:Checked>0</x:Checked>", vml_text
+                )
+
+                shapes = re.findall(
+                    r"(<v:shape.*.*?/v:shape>)", vml_text, re.DOTALL
+                )
+                for shape in shapes:
+                    if 'ObjectType="Checkbox"' in shape:
+                        cleaned_text = re.sub(
+                            r"\s+", " ", re.sub(r"<[^>]+>", " ", shape)
+                        ).lower()
+
+                        if any(kw in cleaned_text for kw in target_keywords):
+                            new_shape = re.sub(
+                                r'<x:ClientData ObjectType="Checkbox">(.*?)</x:ClientData>',
+                                r'<x:ClientData ObjectType="Checkbox">\g<1><x:Checked>1</x:Checked></x:ClientData>',
+                                shape,
+                                flags=re.DOTALL,
+                            )
+                            vml_text = vml_text.replace(shape, new_shape)
+                            break
+
+                data = vml_text.encode("utf-8")
+
+            dst.writestr(item, data)
+
+    return out_buffer.getvalue()
+
+output_filename = f"Leave_Application_{date_str.replace('/', '-')}.xlsx"
+excel_data = generate_excel_bytes()
+
+# ==========================================
+# 4. Download & Native Share Button
+# ==========================================
+st.download_button(
+    label="📥 Download Excel Form",
+    data=excel_data,
+    file_name=output_filename,
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True,
+    type="primary"
+)
+
+# Mobile Share Sheet Trigger
+st.markdown("### 📱 Share / Open via App")
+st.caption("Tap 'Download Excel Form' above first, then tap below to send via WhatsApp, Email, or Files.")
+
+share_js = """
+<script>
+async function shareFile() {
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Leave Application Form',
+        text: 'Attached is my leave application form.',
+      });
+    } catch (err) {
+      console.log('Share canceled or failed:', err);
+    }
+  } else {
+    alert('Sharing is supported natively on mobile browsers (Safari/Chrome on iOS & Android).');
+  }
+}
+</script>
+<button onclick="shareFile()" style="
+    width: 100%;
+    background-color: #25D366;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+">
+    📤 Share File to App (WhatsApp, Mail, etc.)
+</button>
+"""
+components.html(share_js, height=60)
