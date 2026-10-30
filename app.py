@@ -1,15 +1,19 @@
 import io
 import re
+import smtplib
 import zipfile
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 import streamlit as st
 
-st.set_page_config(page_title="Leave Application Form", page_icon="📄")
+st.set_page_config(page_title="Leave Application Form", page_icon="📄", layout="centered")
 
 st.title("📄 Leave Application Form")
-st.write("Fill in the details below to generate your completed leave application.")
+st.write("Fill in the details below to generate and email your completed leave application.")
 
-# Form inputs
+# ==========================================
+# 1. Form Inputs
+# ==========================================
 leave_type = st.selectbox(
     "Type of Leave",
     [
@@ -25,14 +29,59 @@ leave_type = st.selectbox(
     ],
 )
 
-todays_date_input = st.date_input("Today's Date", datetime.now())
-period_from_input = st.date_input("Period From", datetime.now())
-reason = st.text_input("Reason of Leave", placeholder="e.g. Personal Matters")
+col1, col2 = st.columns(2)
+with col1:
+    todays_date_input = st.date_input("Today's Date", datetime.now())
+with col2:
+    period_from_input = st.date_input("Period From", datetime.now())
+
+# Half-Day & Total Days input
 total_days = st.number_input(
-    "Total Leave Days", min_value=1.0, value=1.0, step=0.5
+    "Total Leave Days", min_value=0.5, value=1.0, step=0.5
 )
 
-# Mapping of Form Control XML property files to leave keywords
+# Pre-fill common reasons or type custom
+common_reasons = ["Personal Matters", "Family Vacation", "Medical / Doctor Appointment", "Urgent Household Matter", "Custom..."]
+selected_reason = st.selectbox("Reason of Leave", common_reasons)
+if selected_reason == "Custom...":
+    reason = st.text_input("Specify Reason", placeholder="Enter your reason...")
+else:
+    reason = selected_reason
+
+# Half-day annotation in reason if applicable
+if total_days % 1 != 0:
+    reason_final = f"{reason} (Half Day)"
+else:
+    reason_final = reason
+
+# Calculate Period To date
+date_str = todays_date_input.strftime("%d-%m-%y")
+start_date_str = period_from_input.strftime("%d-%m-%y")
+
+start_date = datetime.strptime(start_date_str, "%d-%m-%y")
+if total_days <= 0.5:
+    end_date_str = start_date_str
+else:
+    # Full day logic: add int(total_days) - 1 days
+    end_date = start_date + timedelta(days=int(total_days) - 1)
+    end_date_str = end_date.strftime("%d-%m-%y")
+
+# ==========================================
+# 2. In-App Summary Preview
+# ==========================================
+st.markdown("---")
+st.subheader("🔍 Leave Application Preview")
+st.info(f"""
+* **Today's Date:** {date_str}
+* **Type of Leave:** {leave_type}
+* **Period:** {start_date_str} **to** {end_date_str}
+* **Total Days:** {total_days} Day(s)
+* **Reason:** {reason_final}
+""")
+
+# ==========================================
+# 3. File Generation Logic
+# ==========================================
 CTRL_PROP_MAP = {
     "xl/ctrlProps/ctrlProp1.xml": ["adoption leave", "adoption"],
     "xl/ctrlProps/ctrlProp2.xml": ["paternity", "maternity", "p/m-l"],
@@ -57,20 +106,9 @@ LEAVE_KEYWORD_MAP = {
     "Others: Please specify": ["others"],
 }
 
-if st.button("Generate Leave Form", type="primary"):
-    today_date_str = todays_date_input.strftime("%d-%m-%y")
-    start_date_str = period_from_input.strftime("%d-%m-%y")
-    
-    start_date = datetime.strptime(start_date_str, "%d-%m-%y")
-    end_date = start_date + timedelta(days=int(total_days) - 1)
-    end_date_str = end_date.strftime("%d-%m-%y")
-
+def generate_excel_bytes():
     template_path = "Leave_application.xlsx"
-    output_filename = f"{today_date_str.replace('/', '-')}.xlsx"
-
-    target_keywords = LEAVE_KEYWORD_MAP.get(
-        leave_type, [leave_type.lower()]
-    )
+    target_keywords = LEAVE_KEYWORD_MAP.get(leave_type, [leave_type.lower()])
 
     out_buffer = io.BytesIO()
     with zipfile.ZipFile(template_path, "r") as src, zipfile.ZipFile(
@@ -79,23 +117,19 @@ if st.button("Generate Leave Form", type="primary"):
         for item in src.infolist():
             data = src.read(item.filename)
 
-            # 1. Update cell values in sheet1.xml
+            # Update cells
             if item.filename == "xl/worksheets/sheet1.xml":
                 xml_str = data.decode("utf-8")
-                
-                # G14 uses Today's Date
                 xml_str = re.sub(
                     r'<c r="G14"[^>]*>(.*?)</c>',
-                    f'<c r="G14" s="25" t="inlineStr"><is><t>Date: {today_date_str}</t></is></c>',
+                    f'<c r="G14" s="25" t="inlineStr"><is><t>Date: {date_str}</t></is></c>',
                     xml_str,
                 )
-                # A18 uses Period From
                 xml_str = re.sub(
                     r'<c r="A18"[^>]*/>',
                     f'<c r="A18" s="5" t="inlineStr"><is><t>{start_date_str}</t></is></c>',
                     xml_str,
                 )
-                # B18 uses Period To
                 xml_str = re.sub(
                     r'<c r="B18"[^>]*/>',
                     f'<c r="B18" s="5" t="inlineStr"><is><t>{end_date_str}</t></is></c>',
@@ -103,7 +137,7 @@ if st.button("Generate Leave Form", type="primary"):
                 )
                 xml_str = re.sub(
                     r'<c r="C18"[^>]*/>',
-                    f'<c r="C18" s="19" t="inlineStr"><is><t>{reason}</t></is></c>',
+                    f'<c r="C18" s="19" t="inlineStr"><is><t>{reason_final}</t></is></c>',
                     xml_str,
                 )
                 xml_str = re.sub(
@@ -118,7 +152,7 @@ if st.button("Generate Leave Form", type="primary"):
                 )
                 data = xml_str.encode("utf-8")
 
-            # 2. Update Form Control Property files (xl/ctrlProps/ctrlProp*.xml)
+            # Update Form Control Properties
             elif item.filename in CTRL_PROP_MAP:
                 prop_keywords = CTRL_PROP_MAP[item.filename]
                 is_selected = any(kw in target_keywords for kw in prop_keywords) or any(
@@ -127,7 +161,6 @@ if st.button("Generate Leave Form", type="primary"):
 
                 ctrl_xml = data.decode("utf-8")
                 ctrl_xml = re.sub(r'\s*checked="Checked"', '', ctrl_xml)
-
                 if is_selected:
                     ctrl_xml = ctrl_xml.replace(
                         'objectType="CheckBox"',
@@ -135,10 +168,9 @@ if st.button("Generate Leave Form", type="primary"):
                     )
                 data = ctrl_xml.encode("utf-8")
 
-            # 3. Update VML Checkbox Drawing Layer
+            # Update VML Checkboxes
             elif item.filename == "xl/drawings/vmlDrawing1.vml":
                 vml_text = data.decode("utf-8")
-
                 vml_text = re.sub(
                     r"<x:Checked>1</x:Checked>", "<x:Checked>0</x:Checked>", vml_text
                 )
@@ -166,10 +198,65 @@ if st.button("Generate Leave Form", type="primary"):
 
             dst.writestr(item, data)
 
-    st.success("Form generated successfully!")
-    st.download_button(
-        label="📥 Download Excel Form",
-        data=out_buffer.getvalue(),
-        file_name=output_filename,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    return out_buffer.getvalue()
+
+output_filename = f"Leave_Application_{date_str.replace('/', '-')}.xlsx"
+excel_data = generate_excel_bytes()
+
+# ==========================================
+# 4. Download & Email Actions
+# ==========================================
+st.download_button(
+    label="📥 Download Excel Form",
+    data=excel_data,
+    file_name=output_filename,
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    use_container_width=True,
+    type="primary"
+)
+
+st.markdown("---")
+st.subheader("📧 Direct Email (Optional)")
+
+recipient_email = st.text_input("Manager / HR Email Address", placeholder="hr@company.com")
+
+if st.button("🚀 Email Form Directly"):
+    if not recipient_email:
+        st.warning("Please enter a valid recipient email address.")
+    else:
+        try:
+            # Load credentials from Streamlit Secrets
+            sender_email = st.secrets["SMTP_EMAIL"]
+            sender_password = st.secrets["SMTP_PASSWORD"]
+            smtp_server = st.secrets.get("SMTP_SERVER", "smtp.gmail.com")
+            smtp_port = int(st.secrets.get("SMTP_PORT", 587))
+
+            # Compose Email
+            msg = EmailMessage()
+            msg["Subject"] = f"Leave Application - {leave_type} ({start_date_str})"
+            msg["From"] = sender_email
+            msg["To"] = recipient_email
+            msg.set_content(
+                f"Dear Manager / HR,\n\nPlease find attached my Leave Application Form for {leave_type}.\n\n"
+                f"Details:\n- Date: {date_str}\n- Period: {start_date_str} to {end_date_str}\n"
+                f"- Total Days: {total_days}\n- Reason: {reason_final}\n\nThank you!"
+            )
+
+            # Attach Excel File
+            msg.add_attachment(
+                excel_data,
+                maintype="application",
+                subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                filename=output_filename,
+            )
+
+            # Send Email
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+
+            st.success(f"Email sent successfully to {recipient_email}!")
+        except Exception as e:
+            st.error(f"Failed to send email: {e}")
+            st.info("Ensure Secrets (SMTP_EMAIL & SMTP_PASSWORD) are set up in Streamlit Cloud Settings.")
